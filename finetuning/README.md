@@ -165,6 +165,48 @@ The Grounding task is used to train the model for region localization (phrase gr
 - **Pointing**: Uses `"points"` field with `"point": [x, y]` (2 coordinates)
 - Both use `"phrase"` to specify the object category
 
+**Negative Sample Support**:
+
+Rex-Omni supports negative samples (categories not present in the image) directly in the data format:
+
+For Grounding task:
+```json
+{
+  "boxes": [
+    {"bbox": [10, 20, 100, 200], "phrase": "person"},        // Positive sample
+    {"bbox": null, "phrase": "car"}                          // Negative sample
+  ]
+}
+```
+
+For Pointing task:
+```json
+{
+  "points": [
+    {"point": [65, 110], "phrase": "person"},                // Positive sample
+    {"point": null, "phrase": "car"}                         // Negative sample
+  ]
+}
+```
+
+When a `bbox` or `point` is `null`, the model will learn to respond with `"None"` for that category, indicating the object is not present in the image. This helps reduce hallucinations.
+
+**Alternative: Using `extra_categories`**
+
+You can also dynamically add negative samples during training without including them in the data:
+
+```python
+task_fn=dict(
+    type=GroundingTaskFn,
+    task_prompts=GROUNDING_SINGLE_REGION_STAGE_XYXY,
+    image_min_pixels=min_pixels,
+    image_max_pixels=max_pixels,
+    extra_categories=["car", "dog", "cat", ...],  # Categories for negative sampling
+)
+```
+
+This will randomly sample categories from `extra_categories` that don't appear in the image and add them as negative samples.
+
 #### 1.2.2 Visualize the Toy Dataset
 
 - Visualize Grounding Data

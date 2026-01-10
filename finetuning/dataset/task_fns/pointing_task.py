@@ -141,7 +141,7 @@ class PointingTaskFn(object):
         Args:
             annotations (Dict): Annotation dict with the following keys:
                 {
-                    "points": List[List[float]], a list of point coordinates in xy format
+                    "points": List[List[float] or None], a list of point coordinates in xy format (None for negative samples)
                     "labels": List[str or int], a list of category names or ids
                     "size": Tuple[int, int], the original size of the image
                 }
@@ -149,25 +149,39 @@ class PointingTaskFn(object):
         Returns:
             Dict: A dict for qa pair. The key is the category name and the value is a list of point coordinates after resized.
         """
-        # Get positive categories from current image
-        positive_categories = set()
-        qa_pair = {}
+        # Get positive and negative categories from current image
+        positive_categories = {}  # category -> list of points
+        negative_categories = set()  # categories with None points
 
         for point, label in zip(annotations["points"], annotations["labels"]):
             category_name = self.modify_cateogry_name(label)
+            
+            if point is not None:
+                # Positive sample: valid point
+                if category_name not in positive_categories:
+                    positive_categories[category_name] = []
+                positive_categories[category_name].append(point)
+            else:
+                # Negative sample: point is None
+                negative_categories.add(category_name)
 
-            positive_categories.add(category_name)
-            if category_name not in qa_pair:
-                qa_pair[category_name] = []
-            qa_pair[category_name].append(point)
+        # Build qa_pair
+        qa_pair = {}
+        
+        # Add positive categories with their points
+        for category_name, points in positive_categories.items():
+            qa_pair[category_name] = points
+        
+        # Add negative categories with None
+        for category_name in negative_categories:
+            if category_name not in qa_pair:  # Only add if not already a positive sample
+                qa_pair[category_name] = None
 
-        # Add negative categories if extra_categories is provided
+        # Add extra negative categories if provided
         if self.extra_categories is not None:
-            # Get negative categories (categories not in current image)
-            negative_categories = set(self.extra_categories) - positive_categories
-
-            # Add all negative categories with None points
-            for cat in negative_categories:
+            all_present_categories = set(positive_categories.keys()) | negative_categories
+            extra_negative_categories = set(self.extra_categories) - all_present_categories
+            for cat in extra_negative_categories:
                 qa_pair[cat] = None
 
         # Convert positive points to normalized bins
