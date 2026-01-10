@@ -206,17 +206,39 @@ class GroundingTSVDataset(Dataset):
         return image, data_dict
 
     def convert_raw_data(self, image_pil, data_dict):
-        """Convert raw data from the tsv format to a unified format."""
-        boxes = [anno["bbox"] for anno in data_dict["boxes"]]
-        labels = [
-            anno.get("phrase", anno.get("caption", None)) for anno in data_dict["boxes"]
-        ]
-        # convert box to xyxy
+        """Convert raw data from the tsv format to a unified format.
+
+        Supports both positive samples (with valid bbox) and negative samples (bbox is None/null).
+        """
+        boxes = []
+        labels = []
+        for anno in data_dict["boxes"]:
+            bbox = anno.get("bbox")
+            phrase = anno.get("phrase", anno.get("caption", None))
+
+            if bbox is not None:
+                # Positive sample: valid bounding box
+                boxes.append(bbox)
+            else:
+                # Negative sample: bbox is None, append None placeholder
+                boxes.append(None)
+
+            labels.append(phrase)
+
+        # Convert valid boxes to xyxy format (skip None values)
         if self.ori_box_format == "xywh":
-            if len(boxes) > 0:
-                boxes = xywh2xwxy(boxes)
+            converted_boxes = []
+            for box in boxes:
+                if box is not None:
+                    # Convert single box from xywh to xyxy
+                    x, y, w, h = box
+                    converted_boxes.append([x, y, x + w, y + h])
+                else:
+                    converted_boxes.append(None)
+            boxes = converted_boxes
+
         data_dict = dict(
-            boxes=np.array(boxes),
+            boxes=boxes,  # List that may contain None values
             labels=labels,
             size=(image_pil.height, image_pil.width),
         )
@@ -415,14 +437,27 @@ class PointingTSVDataset(Dataset):
         return image, data_dict
 
     def convert_raw_data(self, image_pil, data_dict):
-        """Convert raw data from the tsv format to a unified format."""
-        points = [anno["point"] for anno in data_dict["points"]]
-        labels = [
-            anno.get("phrase", anno.get("caption", None))
-            for anno in data_dict["points"]
-        ]
+        """Convert raw data from the tsv format to a unified format.
+
+        Supports both positive samples (with valid point) and negative samples (point is None/null).
+        """
+        points = []
+        labels = []
+        for anno in data_dict["points"]:
+            point = anno.get("point")
+            phrase = anno.get("phrase", anno.get("caption", None))
+
+            if point is not None:
+                # Positive sample: valid point
+                points.append(point)
+            else:
+                # Negative sample: point is None, append None placeholder
+                points.append(None)
+
+            labels.append(phrase)
+
         data_dict = dict(
-            points=points,
+            points=points,  # List that may contain None values
             labels=labels,
             size=(image_pil.height, image_pil.width),
         )
