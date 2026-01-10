@@ -129,12 +129,12 @@ def visualize_sample(
     font_size: int = 12,
     show: bool = True,
 ):
-    """Visualize a sample with bounding boxes and phrases.
+    """Visualize a sample with bounding boxes/points and phrases.
 
     Args:
         image: PIL Image to visualize
-        data_dict: Annotation dictionary containing boxes and phrases
-        box_format: Format of bounding boxes ('xywh' or 'xyxy')
+        data_dict: Annotation dictionary containing boxes/points and phrases
+        box_format: Format of bounding boxes ('xywh' or 'xyxy'), only used for box data
         save_path: Path to save the visualization (optional)
         font_size: Font size for text labels
         show: Whether to display the plot
@@ -143,10 +143,12 @@ def visualize_sample(
     fig, ax = plt.subplots(1, 1, figsize=(15, 10))
     ax.imshow(image)
 
-    # Get unique phrases and assign colors
+    # Check if this is box or point data
     boxes_info = data_dict.get("boxes", [])
-    if not boxes_info:
-        print("Warning: No boxes found in annotation")
+    points_info = data_dict.get("points", [])
+
+    if not boxes_info and not points_info:
+        print("Warning: No boxes or points found in annotation")
         ax.axis("off")
         plt.tight_layout()
         if save_path:
@@ -155,15 +157,25 @@ def visualize_sample(
             plt.show()
         return fig, ax
 
-    # Extract phrases, supporting both "phrase" and "caption" keys
-    unique_phrases = list(
-        set(
-            [
-                box_info.get("phrase") or box_info.get("caption", "")
-                for box_info in boxes_info
-            ]
+    # Extract unique phrases and assign colors
+    if boxes_info:
+        unique_phrases = list(
+            set(
+                [
+                    box_info.get("phrase") or box_info.get("caption", "")
+                    for box_info in boxes_info
+                ]
+            )
         )
-    )
+    else:  # points_info
+        unique_phrases = list(
+            set(
+                [
+                    point_info.get("phrase") or point_info.get("caption", "")
+                    for point_info in points_info
+                ]
+            )
+        )
 
     # Use a colormap with good contrast
     if len(unique_phrases) > 0:
@@ -173,47 +185,86 @@ def visualize_sample(
         colors = []
     phrase_to_color = {phrase: colors[i] for i, phrase in enumerate(unique_phrases)}
 
-    # Draw bounding boxes and labels
-    for box_info in boxes_info:
-        bbox = box_info["bbox"]
-        phrase = box_info.get("phrase") or box_info.get("caption", "")
+    # Draw bounding boxes if present
+    if boxes_info:
+        for box_info in boxes_info:
+            bbox = box_info["bbox"]
+            phrase = box_info.get("phrase") or box_info.get("caption", "")
 
-        # Convert bbox to xywh format for visualization (matplotlib Rectangle expects xywh)
-        if box_format == "xyxy":
-            bbox_xywh = convert_bbox_format(bbox, "xyxy", "xywh")
-        else:  # box_format == "xywh"
-            bbox_xywh = bbox
+            # Convert bbox to xywh format for visualization (matplotlib Rectangle expects xywh)
+            if box_format == "xyxy":
+                bbox_xywh = convert_bbox_format(bbox, "xyxy", "xywh")
+            else:  # box_format == "xywh"
+                bbox_xywh = bbox
 
-        # Get color for this phrase
-        color = phrase_to_color.get(phrase, "red")
+            # Get color for this phrase
+            color = phrase_to_color.get(phrase, "red")
 
-        # Create rectangle patch
-        rect = patches.Rectangle(
-            (bbox_xywh[0], bbox_xywh[1]),
-            bbox_xywh[2],
-            bbox_xywh[3],
-            linewidth=3,
-            edgecolor=color,
-            facecolor="none",
-        )
-        ax.add_patch(rect)
+            # Create rectangle patch
+            rect = patches.Rectangle(
+                (bbox_xywh[0], bbox_xywh[1]),
+                bbox_xywh[2],
+                bbox_xywh[3],
+                linewidth=3,
+                edgecolor=color,
+                facecolor="none",
+            )
+            ax.add_patch(rect)
 
-        # Add text label with better visibility
-        ax.text(
-            bbox_xywh[0],
-            bbox_xywh[1] - 5,
-            phrase,
-            fontsize=font_size,
-            color="white",
-            weight="bold",
-            bbox=dict(
-                boxstyle="round,pad=0.3",
+            # Add text label with better visibility
+            ax.text(
+                bbox_xywh[0],
+                bbox_xywh[1] - 5,
+                phrase,
+                fontsize=font_size,
+                color="white",
+                weight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor=color,
+                    alpha=0.8,
+                    edgecolor="black",
+                    linewidth=1,
+                ),
+            )
+
+    # Draw points if present
+    if points_info:
+        for point_info in points_info:
+            point = point_info["point"]
+            phrase = point_info.get("phrase") or point_info.get("caption", "")
+
+            # Get color for this phrase
+            color = phrase_to_color.get(phrase, "red")
+
+            # Draw point as a circle
+            x, y = point[0], point[1]
+            circle = patches.Circle(
+                (x, y),
+                radius=8,  # Point size
+                linewidth=3,
+                edgecolor="white",
                 facecolor=color,
-                alpha=0.8,
-                edgecolor="black",
-                linewidth=1,
-            ),
-        )
+                alpha=0.9,
+            )
+            ax.add_patch(circle)
+
+            # Add text label with better visibility
+            ax.text(
+                x + 15,
+                y,
+                phrase,
+                fontsize=font_size,
+                color="white",
+                weight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor=color,
+                    alpha=0.8,
+                    edgecolor="black",
+                    linewidth=1,
+                ),
+            )
 
     ax.axis("off")
     plt.tight_layout()
@@ -271,7 +322,8 @@ def visualize_samples(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visualize TSV dataset with bounding boxes and phrases"
+        description="Visualize TSV dataset with bounding boxes/points and phrases. "
+        "Supports both Grounding (boxes) and Pointing (points) data formats."
     )
     parser.add_argument(
         "--img_tsv_file",
@@ -296,7 +348,8 @@ def main():
         type=str,
         default="xyxy",
         choices=["xywh", "xyxy"],
-        help="Format of bounding boxes: 'xywh' (x, y, width, height) or 'xyxy' (x1, y1, x2, y2). Default: xywh",
+        help="Format of bounding boxes: 'xywh' (x, y, width, height) or 'xyxy' (x1, y1, x2, y2). "
+        "Only used for Grounding data. Default: xyxy",
     )
     parser.add_argument(
         "--output_dir",

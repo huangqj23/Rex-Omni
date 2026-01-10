@@ -123,7 +123,7 @@ class TSVBase(Dataset):
 
 ### 1.2. Download Toy Data
 
-We have released a toy grounding dataset with 1000 samples for finetuning example. You can download it at [Huggingface](https://huggingface.co/datasets/Mountchicken/Rex-Omni-Finetune-ToyData)
+We have released toy datasets for both grounding and pointing tasks with 1000 samples for finetuning examples. You can download them at [Huggingface](https://huggingface.co/datasets/Mountchicken/Rex-Omni-Finetune-ToyData)
 
 #### 1.2.1 Grounding Data Format Example
 
@@ -134,29 +134,59 @@ The Grounding task is used to train the model for region localization (phrase gr
 - `image_line_idx`: Line index of the corresponding image in the images.tsv file
 - `annotation_json`: JSON-formatted annotation data
 
-**Annotation JSON data structure**:
+**Annotation JSON data structure for Grounding**:
 ```json
 {
   "boxes": [
     {
       "bbox": [x0, y0, x1, y1],  // Bounding box coordinates in xyxy format
-      "phrase": "object description",  // the category of description for this box
+      "phrase": "category name",  // the category or description for this box
     },
     ...
   ]
 }
 ```
 
+**Annotation JSON data structure for Pointing**:
+```json
+{
+  "points": [
+    {
+      "point": [x, y],  // Point coordinates in absolute pixel values
+      "phrase": "category name",  // the category or description for this point
+    },
+    ...
+  ]
+}
+```
+
+**Key Differences**:
+- **Grounding**: Uses `"boxes"` field with `"bbox": [x0, y0, x1, y1]` (4 coordinates)
+- **Pointing**: Uses `"points"` field with `"point": [x, y]` (2 coordinates)
+- Both use `"phrase"` to specify the object category
+
 #### 1.2.2 Visualize the Toy Dataset
 
+- Visualize Grounding Data
 ```python
 python tools/vis_tsv_dataset.py \
-  --img_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/SFT_Grounding_data.images.tsv \
-  --ann_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/SFT_Grounding_data.annotations.tsv \
-  --ann_lineidx_file Mountchicken/Rex-Omni-Finetune-ToyData/SFT_Grounding_data.annotations.tsv.lineidx \
+  --img_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_data.images.tsv \
+  --ann_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_data.annotations.tsv \
+  --ann_lineidx_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_data.annotations.tsv.lineidx \
   --output_dir Mountchicken/Rex-Omni-Finetune-ToyData/vis \
   --num_samples 20 \
 ```
+
+- Visualize Pointing Data
+```python
+python tools/vis_tsv_dataset.py \
+  --img_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_point_data.images.tsv \
+  --ann_tsv_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_point_data.annotations.tsv \
+  --ann_lineidx_file Mountchicken/Rex-Omni-Finetune-ToyData/toy_point_data.annotations.tsv.lineidx \
+  --output_dir Mountchicken/Rex-Omni-Finetune-ToyData/vis \
+  --num_samples 20 \
+```
+
 
 #### 1.2.3 Convert Custom Data to TSV Format
 
@@ -182,10 +212,18 @@ The input JSON file should contain one JSON object per line. Each line must have
 
 **Example JSON file (`annotations.json`):**
 
+For Grounding task:
 ```json
 {"image_name": "image1.jpg", "annotation": {"boxes": [{"bbox": [10, 20, 100, 200], "phrase": "person"}]}}
 {"image_name": "subdir/image2.jpg", "annotation": {"boxes": [{"bbox": [50, 50, 150, 250], "phrase": "car"}]}}
 {"image_name": "image3.png", "annotation": {"boxes": [{"bbox": [0, 0, 200, 300], "phrase": "dog"}]}}
+```
+
+For Pointing task:
+```json
+{"image_name": "image1.jpg", "annotation": {"points": [{"point": [65, 110], "phrase": "person"}]}}
+{"image_name": "subdir/image2.jpg", "annotation": {"points": [{"point": [100, 150], "phrase": "car"}]}}
+{"image_name": "image3.png", "annotation": {"points": [{"point": [100, 150], "phrase": "dog"}]}}
 ```
 
 **Parameters:**
@@ -220,7 +258,7 @@ bash scripts/sft.sh
 - `--mm_projector_lr`: Multimodal projector learning rate
 - `--vision_tower_lr`: Vision encoder learning rate
 
----
+----
 
 ## Stage 2: GRPO Finetuning
 
@@ -247,6 +285,53 @@ python tools/merge_rl_checkpoints_to_hg_version.py --local_dir PATH_TO_CHECKPOIN
 ### 2.4 Reward Function
 
 We implement the following reward functions in `verl/configs/reward_func.py`:
-- Box IoU
-- Point in Box
-- Point in Mask
+
+**For Grounding Task**:
+- **Box IoU**: Computes F1 score based on IoU between predicted and ground truth bounding boxes
+  - Precision: Average best IoU for each predicted box
+  - Recall: Average best IoU for each GT box
+  - Use `reward_name="box_iou"` in config
+
+**For Pointing Task**:
+- **Point in Box**: Checks if predicted points fall within ground truth bounding boxes
+  - Requires GT data with both points and boxes
+  - Use `reward_name="point_in_box"` in config
+  
+- **Point in Mask**: Checks if predicted points fall within ground truth masks
+  - Requires GT data with both points and masks (RLE format)
+  - Use `reward_name="point_in_mask"` in config
+
+**Example GRPO Config for Pointing**:
+
+```python
+# configs/pointing_grpo.py
+from dataset.task_fns import PointingTaskFn
+from dataset.task_fns.task_prompts.pointing_task import POINTING_TASK_PROMPTS
+from verl.utils.dataset import TSVRLHFDataset
+
+min_pixels = 16 * 28 * 28
+max_pixels = 2560 * 28 * 28
+
+pointing_data = dict(
+    type=TSVRLHFDataset,
+    image_tsv_file="path/to/pointing_data.images.tsv",
+    anno_tsv_file="path/to/pointing_data.annotations.tsv",
+    anno_idx_file="path/to/pointing_data.annotations.tsv.lineidx",
+    min_pixels=min_pixels,
+    max_pixels=max_pixels,
+    task_fn=dict(
+        type=PointingTaskFn,
+        task_prompts=POINTING_TASK_PROMPTS,
+        image_min_pixels=min_pixels,
+        image_max_pixels=max_pixels,
+    ),
+    dataset_name="pointing_grpo",
+    reward_name="point_in_box",  # or "point_in_mask"
+)
+
+train_dataset = [
+    pointing_data,
+]
+```
+
+All reward functions return an F1 score (0-1) calculated from precision and recall.

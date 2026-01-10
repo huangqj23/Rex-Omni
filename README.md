@@ -60,6 +60,7 @@ Say goodbye to inefficient reading, and let AI help you stay on top of the lates
 [![Video Name](https://github.com/user-attachments/assets/bced2c0f-0d4c-4c5d-a264-47bfc533ca31)](https://github.com/user-attachments/assets/13bfb7ab-a9b6-4f09-86c2-c513a6a8f221)
 
 # News 🎉
+- [2026-01-10] **Pointing Task Finetuning** is now supported! Train Rex-Omni on custom pointing datasets with SFT and GRPO. See [Fine-tuning Guide](finetuning/README.md) for details.
 - [2025-10-31] We release the AWQ quantized version of Rex-Omni, which saves 50% of the storage space. [Rex-Omni-AWQ](https://huggingface.co/IDEA-Research/Rex-Omni-AWQ)
 - [2025-10-29] Fine-tuning code is now [available](finetuning/README.md).
 - [2025-10-17] Evaluation code and dataset is now [available](evaluation/README.md).
@@ -67,6 +68,7 @@ Say goodbye to inefficient reading, and let AI help you stay on top of the lates
 
 # Table of Contents
 
+- [Breaking News: We've just open-sourced Resophy! 🎉](#breaking-news-weve-just-open-sourced-resophy-)
 - [News 🎉](#news-)
 - [Table of Contents](#table-of-contents)
   - [TODO LIST 📝](#todo-list-)
