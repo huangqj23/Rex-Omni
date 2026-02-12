@@ -171,3 +171,7 @@ evaluation/batch_eval.py
 evaluation/sbatch_script.sh
 evaluation/sbatch_logs/
 Mountchicken/
+
+# Hugging Face cache
+weights/
+transformers/

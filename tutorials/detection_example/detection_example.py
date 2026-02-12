@@ -12,7 +12,7 @@ from rex_omni import RexOmniVisualize, RexOmniWrapper
 
 def main():
     # Model path - replace with your actual model path
-    model_path = "IDEA-Research/Rex-Omni"
+    model_path = "/root/Rex-Omni/weights/Rex-Omni"
 
     # Create wrapper with custom parameters
     rex_model = RexOmniWrapper(
